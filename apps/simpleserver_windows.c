@@ -21,157 +21,147 @@
 
 int quit = 0;
 
+#define SAM_CSN { 0x44, 0x0A, 0x44, 0x00, 0x00, 0x00, 0xA0, 0x02, 0x96, 0x00 }
+#define SAM_CSN_LEN 10
+
 static CONDITION_VARIABLE cv;
 static CRITICAL_SECTION cs;
 
-static bool state = false;
-int power;
+static bool card_present = true;
+char *card_data[SAM_CSN_LEN] = SAM_CSN;
 oc_string_t name;
 
-static int
-app_init(void)
+static int app_init(void)
 {
-  int ret = oc_init_platform("Intel", NULL, NULL);
-  ret |= oc_add_device("/oic/d", "oic.d.light", "Lamp", "ocf.1.0.0",
-                       "ocf.res.1.0.0", NULL, NULL);
-  oc_new_string(&name, "John's Light", 12);
-  return ret;
+	int ret = oc_init_platform("HID Global", NULL, NULL);
+	ret |= oc_add_device("/oic/d", "oic.d.reader", "Reader", "ocf.1.1.0",
+		"ocf.res.1.1.0", NULL, NULL);
+	oc_new_string(&name, "SE Reader", 9);
+
+	return ret;
 }
 
-static void
-get_light(oc_request_t *request, oc_interface_mask_t iface_mask,
-          void *user_data)
-{
-  (void)user_data;
-  ++power;
 
-  PRINT("GET_light:\n");
-  oc_rep_start_root_object();
-  switch (iface_mask) {
-  case OC_IF_BASELINE:
-    oc_process_baseline_interface(request->resource);
-  case OC_IF_RW:
-    oc_rep_set_boolean(root, state, state);
-    oc_rep_set_int(root, power, power);
-    oc_rep_set_text_string(root, name, oc_string(name));
-    break;
-  default:
-    break;
-  }
-  oc_rep_end_root_object();
-  oc_send_response(request, OC_STATUS_OK);
+static void get_reader(oc_request_t *request, oc_interface_mask_t interfaces, void *user_data)
+{
+	(void)user_data;
+
+	PRINT("GET_reader:\n");
+	oc_rep_start_root_object();
+
+	switch (interfaces) {
+	case OC_IF_BASELINE:
+		oc_process_baseline_interface(request->resource);
+	case OC_IF_RW:
+		//oc_rep_start_object(root, card);
+		oc_rep_set_boolean(root, card_present, card_present);
+		oc_rep_set_byte_string(root, card_data, &card_data, SAM_CSN_LEN);
+		//oc_rep_end_object(root, card);
+
+		oc_rep_set_text_string(root, name, oc_string(name));
+		break;
+	default:
+		break;
+	}
+	oc_rep_end_root_object();
+	oc_send_response(request, OC_STATUS_OK);
 }
 
-static void
-post_light(oc_request_t *request, oc_interface_mask_t iface_mask,
-           void *user_data)
+static void post_reader(oc_request_t *request, oc_interface_mask_t iface_mask, void *user_data)
 {
-  (void)iface_mask;
-  (void)user_data;
-  PRINT("POST_light:\n");
-  oc_rep_t *rep = request->request_payload;
-  while (rep != NULL) {
-    PRINT("key: %s ", oc_string(rep->name));
-    switch (rep->type) {
-    case OC_REP_BOOL:
-      state = rep->value.boolean;
-      PRINT("value: %d\n", state);
-      break;
-    case OC_REP_INT:
-      power = rep->value.integer;
-      PRINT("value: %d\n", power);
-      break;
-    case OC_REP_STRING:
-      oc_free_string(&name);
-      oc_new_string(&name, oc_string(rep->value.string),
-                    oc_string_len(rep->value.string));
-      break;
-    default:
-      oc_send_response(request, OC_STATUS_BAD_REQUEST);
-      return;
-      break;
-    }
-    rep = rep->next;
-  }
-  oc_send_response(request, OC_STATUS_CHANGED);
+	(void)user_data;
+	(void)iface_mask;
+
+	PRINT("POST_reader:\n");
+	oc_rep_t *rep = request->request_payload;
+
+	while (rep != NULL) {
+		PRINT("key: %s ", oc_string(rep->name));
+		switch (rep->type) {
+		case OC_REP_BOOL:
+			PRINT("Cannot set card_present...\n");
+			break;
+		case OC_REP_STRING:
+			oc_free_string(&name);
+			oc_new_string(&name, oc_string(rep->value.string), oc_string_len(rep->value.string));
+			PRINT("name: %s\n", oc_string(name));
+			break;
+		default:
+			oc_send_response(request, OC_STATUS_BAD_REQUEST);
+			return;
+			break;
+		}
+
+		rep = rep->next;
+	}
+
+	oc_send_response(request, OC_STATUS_CHANGED);
 }
 
-static void
-put_light(oc_request_t *request, oc_interface_mask_t iface_mask,
-          void *user_data)
+
+static void register_resources(void)
 {
-  (void)iface_mask;
-  (void)user_data;
-  post_light(request, iface_mask, user_data);
+	oc_resource_t *res = oc_new_resource(NULL, "/a/reader", 2, 0);
+	oc_resource_bind_resource_type(res, "core.reader");
+	oc_resource_bind_resource_interface(res, OC_IF_RW);
+	oc_resource_set_default_interface(res, OC_IF_RW);
+	oc_resource_set_discoverable(res, true);
+	oc_resource_set_periodic_observable(res, 1);
+	oc_resource_set_request_handler(res, OC_GET, get_reader, NULL);
+	oc_resource_set_request_handler(res, OC_PUT, post_reader, NULL);
+	oc_resource_set_request_handler(res, OC_POST, post_reader, NULL);
+	oc_add_resource(res);
 }
 
-static void
-register_resources(void)
+static void signal_event_loop(void)
 {
-  oc_resource_t *res = oc_new_resource(NULL, "/a/light", 2, 0);
-  oc_resource_bind_resource_type(res, "core.light");
-  oc_resource_bind_resource_type(res, "core.brightlight");
-  oc_resource_bind_resource_interface(res, OC_IF_RW);
-  oc_resource_set_default_interface(res, OC_IF_RW);
-  oc_resource_set_discoverable(res, true);
-  oc_resource_set_periodic_observable(res, 1);
-  oc_resource_set_request_handler(res, OC_GET, get_light, NULL);
-  oc_resource_set_request_handler(res, OC_PUT, put_light, NULL);
-  oc_resource_set_request_handler(res, OC_POST, post_light, NULL);
-  oc_add_resource(res);
+	WakeConditionVariable(&cv);
 }
 
-static void
-signal_event_loop(void)
+void handle_signal(int signal)
 {
-  WakeConditionVariable(&cv);
+	signal_event_loop();
+	quit = 1;
 }
 
-void
-handle_signal(int signal)
+int main(void)
 {
-  signal_event_loop();
-  quit = 1;
-}
+	InitializeCriticalSection(&cs);
+	InitializeConditionVariable(&cv);
 
-int
-main(void)
-{
-  InitializeCriticalSection(&cs);
-  InitializeConditionVariable(&cv);
+	int init;
 
-  int init;
+	signal(SIGINT, handle_signal);
 
-  signal(SIGINT, handle_signal);
+	static const oc_handler_t handler = { .init = app_init,
+										 .signal_event_loop = signal_event_loop,
+										 .register_resources = register_resources,
+										 .requests_entry = 0 };
 
-  static const oc_handler_t handler = {.init = app_init,
-                                       .signal_event_loop = signal_event_loop,
-                                       .register_resources = register_resources,
-                                       .requests_entry = 0 };
+	oc_clock_time_t next_event;
 
-  oc_clock_time_t next_event;
+	//#ifdef OC_SECURITY
+	//  oc_storage_config("./simpleserver_creds/");
+	//#endif /* OC_SECURITY */
 
-#ifdef OC_SECURITY
-  oc_storage_config("./simpleserver_creds/");
-#endif /* OC_SECURITY */
+	init = oc_main_init(&handler);
+	if (init < 0)
+		return init;
 
-  init = oc_main_init(&handler);
-  if (init < 0)
-    return init;
+	while (quit != 1) {
+		next_event = oc_main_poll();
+		if (next_event == 0) {
+			SleepConditionVariableCS(&cv, &cs, INFINITE);
+		}
+		else {
+			oc_clock_time_t now = oc_clock_time();
+			if (now < next_event) {
+				SleepConditionVariableCS(&cv, &cs,
+					(DWORD)((next_event - now) * 1000 / OC_CLOCK_SECOND));
+			}
+		}
+	}
 
-  while (quit != 1) {
-    next_event = oc_main_poll();
-    if (next_event == 0) {
-      SleepConditionVariableCS(&cv, &cs, INFINITE);
-    } else {
-      oc_clock_time_t now = oc_clock_time();
-      if (now < next_event) {
-        SleepConditionVariableCS(&cv, &cs,
-              (DWORD)((next_event-now) * 1000 / OC_CLOCK_SECOND));
-      }
-    }
-  }
-
-  oc_main_shutdown();
-  return 0;
+	oc_main_shutdown();
+	return 0;
 }
