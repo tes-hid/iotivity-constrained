@@ -19,6 +19,7 @@
 #include "port/oc_clock.h"
 #include <signal.h>
 #include <windows.h>
+#include <string.h>
 
 int quit = 0;
 
@@ -121,7 +122,15 @@ static oc_discovery_flags_t discovery(const char *anchor, const char *uri, oc_st
   return OC_CONTINUE_DISCOVERY;
 }
 
+static void reader_status_changed(oc_uuid_t *device_id, int status, void *data) {
+	(void)data;
+	// probably should make sure this is the right uuid for the reader...
+	PRINT("Reader status changed to %d\n", status);
+}
+
 static oc_discovery_flags_t discovered_devices(oc_uuid_t *uuid, oc_endpoint_t *endpoint, void *data) {
+	(void)data;
+
 	reader_server = endpoint;
 	reader_uuid = uuid;
 	PRINT("Resource %s hosted at endpoints:\n", a_reader);
@@ -131,6 +140,9 @@ static oc_discovery_flags_t discovered_devices(oc_uuid_t *uuid, oc_endpoint_t *e
 		PRINT("\n");
 		ep = ep->next;
 	}
+
+	oc_obt_perform_just_works_otm(reader_uuid, &reader_status_changed, void *data);
+
 	oc_free_server_endpoints(endpoint);
 
 	return OC_CONTINUE_DISCOVERY;
