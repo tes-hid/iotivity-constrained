@@ -130,7 +130,7 @@ static void reader_status_changed(oc_uuid_t *device_id, int status, void *data) 
 
 static oc_discovery_flags_t discovered_devices(oc_uuid_t *uuid, oc_endpoint_t *endpoint, void *data) {
 	(void)data;
-
+	
 	reader_server = endpoint;
 	reader_uuid = uuid;
 	PRINT("Resource %s hosted at endpoints:\n", a_reader);
@@ -143,7 +143,7 @@ static oc_discovery_flags_t discovered_devices(oc_uuid_t *uuid, oc_endpoint_t *e
 
 	oc_obt_perform_just_works_otm(reader_uuid, &reader_status_changed, NULL);
 
-	return OC_CONTINUE_DISCOVERY;
+	return OC_STOP_DISCOVERY;
 }
 
 static void issue_requests(void)
