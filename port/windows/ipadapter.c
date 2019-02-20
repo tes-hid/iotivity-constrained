@@ -1150,6 +1150,7 @@ int oc_send_buffer(oc_message_t *message)
 			send_sock = dev->secure_sock;
 #else
 			OC_ERR("Endpoint not enabled for ipv4..");
+			return -1;
 #endif
 		}
 #endif /* OC_IPV4 */
