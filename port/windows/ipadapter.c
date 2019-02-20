@@ -52,6 +52,7 @@ typedef struct ip_context_t
 {
   struct ip_context_t *next;
   OC_LIST_STRUCT(eps);
+#ifdef OC_IPV6
   struct sockaddr_storage mcast;
   struct sockaddr_storage server;
   SOCKET mcast_sock;
@@ -62,6 +63,7 @@ typedef struct ip_context_t
   SOCKET secure_sock;
   uint16_t dtls_port;
 #endif /* OC_SECURITY */
+#endif /* OC_IPV6 */
 #ifdef OC_IPV4
   struct sockaddr_storage mcast4;
   struct sockaddr_storage server4;
@@ -215,6 +217,7 @@ get_network_addresses()
       }
     }
 #endif /* OC_IPV4 */
+#ifdef OC_IPV6
        /* Process all IPv6 addresses on this interface. */
     struct sockaddr_in6 *v6addr = NULL;
     for (address = interface->FirstUnicastAddress; address;
@@ -267,6 +270,7 @@ get_network_addresses()
         }
       }
     }
+
     if (!v6addr) {
       return ifaddr_list;
     }
@@ -279,6 +283,7 @@ get_network_addresses()
     ifaddr->if_index = interface->Ipv6IfIndex;
     ifaddr->next = ifaddr_list;
     ifaddr_list = ifaddr;
+#endif /* OC_IPV6 */
   }
 
 cleanup:
@@ -287,8 +292,7 @@ cleanup:
   return ifaddr_list;
 }
 
-static void
-free_network_addresses(ifaddr_t *ifaddr)
+static void free_network_addresses(ifaddr_t *ifaddr)
 {
   while (ifaddr) {
     ifaddr_t *tmp = ifaddr;
@@ -297,9 +301,7 @@ free_network_addresses(ifaddr_t *ifaddr)
   }
 }
 
-#ifdef OC_IPV4
-static int
-add_mcast_sock_to_ipv4_mcast_group(SOCKET mcast_sock,
+static int add_mcast_sock_to_ipv4_mcast_group(SOCKET mcast_sock,
                                    const struct in_addr *local)
 {
   struct ip_mreq mreq;
@@ -319,10 +321,9 @@ add_mcast_sock_to_ipv4_mcast_group(SOCKET mcast_sock,
 
   return 0;
 }
-#endif /* OC_IPV4 */
 
-static int
-add_mcast_sock_to_ipv6_mcast_group(SOCKET mcast_sock, DWORD if_index)
+
+static int add_mcast_sock_to_ipv6_mcast_group(SOCKET mcast_sock, DWORD if_index)
 {
   struct ipv6_mreq mreq;
 
@@ -371,8 +372,7 @@ add_mcast_sock_to_ipv6_mcast_group(SOCKET mcast_sock, DWORD if_index)
   return 0;
 }
 
-static int
-update_mcast_socket(SOCKET mcast_sock, int sa_family, ifaddr_t *ifaddr_list)
+static int update_mcast_socket(SOCKET mcast_sock, int sa_family, ifaddr_t *ifaddr_list)
 {
   int ret = 0;
   ifaddr_t *ifaddr;
@@ -403,8 +403,7 @@ update_mcast_socket(SOCKET mcast_sock, int sa_family, ifaddr_t *ifaddr_list)
   return ret;
 }
 
-static void
-free_endpoints_list(ip_context_t *dev)
+static void free_endpoints_list(ip_context_t *dev)
 {
   oc_endpoint_t *ep = oc_list_pop(dev->eps);
 
@@ -414,8 +413,7 @@ free_endpoints_list(ip_context_t *dev)
   }
 }
 
-static void
-get_interface_addresses(ifaddr_t *ifaddr_list, ip_context_t *dev,
+static void get_interface_addresses(ifaddr_t *ifaddr_list, ip_context_t *dev,
                         unsigned char family, uint16_t port, bool secure)
 {
   ifaddr_t *ifaddr;
@@ -428,6 +426,7 @@ get_interface_addresses(ifaddr_t *ifaddr_list, ip_context_t *dev,
 
   for (ifaddr = ifaddr_list; ifaddr != NULL; ifaddr = ifaddr->next) {
     ep.interface_index = ifaddr->if_index;
+#ifdef OC_IPV6
     if (family == AF_INET6 && ifaddr->addr.ss_family == AF_INET6) {
       struct sockaddr_in6 *addr = (struct sockaddr_in6 *)&ifaddr->addr;
       memcpy(ep.addr.ipv6.address, &addr->sin6_addr, sizeof(addr->sin6_addr));
@@ -446,6 +445,10 @@ get_interface_addresses(ifaddr_t *ifaddr_list, ip_context_t *dev,
       continue;
     }
 #ifdef OC_IPV4
+	else
+#endif /* OC_IPV4 */
+#endif /* OC_IPV6 */
+#ifdef OC_IPV4
     if (family == AF_INET && ifaddr->addr.ss_family == AF_INET) {
       struct sockaddr_in *addr = (struct sockaddr_in *)&ifaddr->addr;
       memcpy(ep.addr.ipv4.address, &addr->sin_addr.S_un.S_addr,
@@ -463,12 +466,11 @@ get_interface_addresses(ifaddr_t *ifaddr_list, ip_context_t *dev,
       PRINT("\n\n");
       continue;
     }
-#endif
+#endif /* OC_IPV4 */
   }
 }
 
-static void
-refresh_endpoints_list(ip_context_t *dev, ifaddr_t *ifaddr_list)
+static void refresh_endpoints_list(ip_context_t *dev, ifaddr_t *ifaddr_list)
 {
   bool ifaddr_supplied = false;
   free_endpoints_list(dev);
@@ -477,10 +479,12 @@ refresh_endpoints_list(ip_context_t *dev, ifaddr_t *ifaddr_list)
   } else {
     ifaddr_supplied = true;
   }
+#ifdef OC_IPV6
   get_interface_addresses(ifaddr_list, dev, AF_INET6, dev->port, false);
 #ifdef OC_SECURITY
   get_interface_addresses(ifaddr_list, dev, AF_INET6, dev->dtls_port, true);
 #endif /* OC_SECURITY */
+#endif /* OC_IPV6 */
 #ifdef OC_IPV4
   get_interface_addresses(ifaddr_list, dev, AF_INET, dev->port4, false);
 #ifdef OC_SECURITY
@@ -492,8 +496,7 @@ refresh_endpoints_list(ip_context_t *dev, ifaddr_t *ifaddr_list)
   }
 }
 
-static int
-process_interface_change_event(void)
+static int process_interface_change_event(void)
 {
   int ret = 0;
   size_t num_devices = oc_core_get_num_devices(), i;
@@ -504,7 +507,9 @@ process_interface_change_event(void)
 
   for (i = 0; i < num_devices; i++) {
     ip_context_t *dev = get_ip_context_for_device(i);
+#ifdef OC_IPV6
     ret += update_mcast_socket(dev->mcast_sock, AF_INET6, ifaddr_list);
+#endif /* OC_IPV6 */
 #ifdef OC_IPV4
     ret += update_mcast_socket(dev->mcast4_sock, AF_INET, ifaddr_list);
 #endif /* OC_IPV4 */
@@ -518,8 +523,7 @@ process_interface_change_event(void)
   return ret;
 }
 
-static int
-get_WSARecvMsg(void)
+static int get_WSARecvMsg(void)
 {
   if (PWSARecvMsg) {
     return 0;
@@ -527,8 +531,11 @@ get_WSARecvMsg(void)
 
   DWORD NumberOfBytes = 0;
   GUID WSARecvMsg_GUID = WSAID_WSARECVMSG;
-
+#ifdef OC_IPV6
   SOCKET sock = socket(AF_INET6, SOCK_DGRAM, 0);
+#else
+  SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
+#endif /* OC_IPV6 */
   if (sock == INVALID_SOCKET) {
     OC_ERR("could not create socket for obtaining WSARecvMsg handle");
     return -1;
@@ -548,8 +555,7 @@ get_WSARecvMsg(void)
   return 0;
 }
 
-static int
-recv_msg(SOCKET sock, uint8_t *recv_buf, int recv_buf_size,
+static int recv_msg(SOCKET sock, uint8_t *recv_buf, int recv_buf_size,
          oc_endpoint_t *endpoint, bool multicast)
 {
   if (!PWSARecvMsg && get_WSARecvMsg() < 0) {
@@ -673,8 +679,7 @@ recv_msg(SOCKET sock, uint8_t *recv_buf, int recv_buf_size,
   return -1;
 }
 
-static void *
-network_event_thread(void *data)
+static void * network_event_thread(void *data)
 {
   ip_context_t *dev = (ip_context_t *)data;
 
@@ -684,7 +689,7 @@ network_event_thread(void *data)
       goto network_event_thread_error;                                         \
     }                                                                          \
   } while (0)
-
+#ifdef OC_IPV6
   WSAEVENT mcast6_event = WSACreateEvent();
   OC_WSAEVENTSELECT(dev->mcast_sock, mcast6_event, FD_READ);
 
@@ -696,6 +701,7 @@ network_event_thread(void *data)
   WSAEVENT secure6_event = WSACreateEvent();
   OC_WSAEVENTSELECT(dev->secure_sock, secure6_event, FD_READ);
 #endif /* OC_SECURITY */
+#endif /* OC_IPV6 */
 
 #ifdef OC_IPV4
   WSAEVENT mcast4_event = WSACreateEvent();
@@ -718,16 +724,20 @@ network_event_thread(void *data)
     events_list[0] = ifchange_event.hEvent;
     events_list_size++;
   }
+#ifdef OC_IPV6
   DWORD MCAST6 = events_list_size;
   events_list[events_list_size] = mcast6_event;
   events_list_size++;
   DWORD SERVER6 = events_list_size;
   events_list[events_list_size] = server6_event;
   events_list_size++;
+#endif /* OC_IPV6 */
 #if defined(OC_SECURITY)
+#ifdef OC_IPV6
   DWORD SECURE6 = events_list_size;
   events_list[events_list_size] = secure6_event;
   events_list_size++;
+#endif /* OC_IPV6 */
 #if defined(OC_IPV4)
   DWORD MCAST4 = events_list_size;
   events_list[events_list_size] = mcast4_event;
@@ -782,7 +792,7 @@ network_event_thread(void *data)
         }
 
         message->endpoint.device = dev->device;
-
+#ifdef OC_IPV6
         if (i == SERVER6) {
           int count = recv_msg(dev->server_sock, message->data, OC_PDU_SIZE,
                                &message->endpoint, false);
@@ -806,6 +816,7 @@ network_event_thread(void *data)
           message->endpoint.flags = IPV6 | MULTICAST;
           goto common;
         }
+#endif /* OC_IPV6 */
 
 #ifdef OC_IPV4
         if (i == SERVER4) {
@@ -834,6 +845,7 @@ network_event_thread(void *data)
 #endif /* OC_IPV4 */
 
 #ifdef OC_SECURITY
+#ifdef OC_IPV6
         if (i == SECURE6) {
           int count = recv_msg(dev->secure_sock, message->data, OC_PDU_SIZE,
                                &message->endpoint, false);
@@ -846,6 +858,8 @@ network_event_thread(void *data)
           message->encrypted = 1;
           goto common;
         }
+#endif /* OC_IPV6 */
+
 #ifdef OC_IPV4
         if (i == SECURE4) {
           int count = recv_msg(dev->secure4_sock, message->data, OC_PDU_SIZE,
@@ -899,8 +913,7 @@ oc_connectivity_get_endpoints(size_t device)
   return oc_list_head(dev->eps);
 }
 
-static int
-get_WSASendMsg(void)
+static int get_WSASendMsg(void)
 {
   if (PWSASendMsg) {
     return 0;
@@ -908,8 +921,11 @@ get_WSASendMsg(void)
 
   DWORD NumberOfBytes = 0;
   GUID WSASendMsg_GUID = WSAID_WSASENDMSG;
-
+#ifdef OC_IPV6
   SOCKET sock = socket(AF_INET6, SOCK_DGRAM, 0);
+#else
+  SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
+#endif /* OC_IPV6 */
   if (sock == INVALID_SOCKET) {
     OC_ERR("could not create socket for obtaining WASSendMsg handle");
     return -1;
@@ -929,8 +945,7 @@ get_WSASendMsg(void)
   return 0;
 }
 
-static bool
-check_if_address_unset(uint8_t *address, int size)
+static bool check_if_address_unset(uint8_t *address, int size)
 {
   int i = 0;
   for (i = 0; i < size; i++) {
@@ -944,8 +959,7 @@ check_if_address_unset(uint8_t *address, int size)
   return true;
 }
 
-static void
-set_source_address_for_interface(ADDRESS_FAMILY family, uint8_t *address,
+static void set_source_address_for_interface(ADDRESS_FAMILY family, uint8_t *address,
                                  int address_size, int interface_index)
 {
   if (!check_if_address_unset(address, address_size)) {
@@ -955,12 +969,17 @@ set_source_address_for_interface(ADDRESS_FAMILY family, uint8_t *address,
   for (addr = ifaddr_list; addr != NULL; addr = addr->next) {
     if (addr->addr.ss_family == family &&
         (int)addr->if_index == interface_index) {
+#ifdef OC_IPV6
       if (family == AF_INET6) {
         struct sockaddr_in6 *a = (struct sockaddr_in6 *)&addr->addr;
         memcpy(address, a->sin6_addr.u.Byte, 16);
       }
 #ifdef OC_IPV4
-	  else if (family == AF_INET) {
+			else
+#endif
+#endif /* OC_IPV6 */
+#ifdef OC_IPV4
+	  if (family == AF_INET) {
         struct sockaddr_in *a = (struct sockaddr_in *)&addr->addr;
         memcpy(address, &a->sin_addr.S_un.S_addr, 4);
       }
@@ -970,8 +989,7 @@ set_source_address_for_interface(ADDRESS_FAMILY family, uint8_t *address,
   free_network_addresses(ifaddr_list);
 }
 
-int
-send_msg(SOCKET sock, struct sockaddr_storage *receiver, oc_message_t *message)
+int send_msg(SOCKET sock, struct sockaddr_storage *receiver, oc_message_t *message)
 {
   if (!PWSASendMsg && get_WSASendMsg() < 0) {
     return -1;
@@ -1017,14 +1035,13 @@ send_msg(SOCKET sock, struct sockaddr_storage *receiver, oc_message_t *message)
 
     struct in6_pktinfo *pktinfo = (struct in6_pktinfo *)WSA_CMSG_DATA(MsgHdr);
 
-    /* Get the outgoing interface index from message->endpint */
+    /* Get the outgoing interface index from message->endpoint */
     pktinfo->ipi6_ifindex = message->endpoint.interface_index;
 
     /* Set the source address of this message using the address
     * from the endpoint's addr_local attribute.
     */
-    set_source_address_for_interface(AF_INET6,
-                                     message->endpoint.addr_local.ipv6.address,
+    set_source_address_for_interface(AF_INET6, message->endpoint.addr_local.ipv6.address,
                                      16, message->endpoint.interface_index);
 
     memcpy(&pktinfo->ipi6_addr, message->endpoint.addr_local.ipv6.address, 16);
@@ -1083,8 +1100,7 @@ send_msg(SOCKET sock, struct sockaddr_storage *receiver, oc_message_t *message)
   return bytes_sent;
 }
 
-int
-oc_send_buffer(oc_message_t *message)
+int oc_send_buffer(oc_message_t *message)
 {
 #ifdef OC_DEBUG
   PRINT("Outgoing message of size %zd bytes to ", message->length);
@@ -1100,10 +1116,12 @@ oc_send_buffer(oc_message_t *message)
            sizeof(r->sin_addr.s_addr));
     r->sin_family = AF_INET;
     r->sin_port = htons(message->endpoint.addr.ipv4.port);
-  } else {
-#else
-  {
-#endif
+  }
+#ifdef OC_IPV6
+	else {
+#endif /* OC_IPV6 */
+#endif /* OC_IPV4 */
+#ifdef OC_IPV6
     struct sockaddr_in6 *r = (struct sockaddr_in6 *)&receiver;
     memcpy(r->sin6_addr.s6_addr, message->endpoint.addr.ipv6.address,
            sizeof(r->sin6_addr.s6_addr));
@@ -1111,6 +1129,7 @@ oc_send_buffer(oc_message_t *message)
     r->sin6_port = htons(message->endpoint.addr.ipv6.port);
     r->sin6_scope_id = message->endpoint.addr.ipv6.scope;
   }
+#endif /* OC_IPV6 */
   SOCKET send_sock = INVALID_SOCKET;
 
   ip_context_t *dev = get_ip_context_for_device(message->endpoint.device);
@@ -1118,34 +1137,23 @@ oc_send_buffer(oc_message_t *message)
 #ifdef OC_SECURITY
   if (message->endpoint.flags & SECURED) {
 #ifdef OC_IPV4
-    if (message->endpoint.flags & IPV4) {
-      send_sock = dev->secure4_sock;
-    } else {
-      send_sock = dev->secure_sock;
-    }
-#else  /* OC_IPV4 */
-    send_sock = dev->secure_sock;
-#endif /* !OC_IPV4 */
+		send_sock = dev->secure4_sock;
+#else
+		send_sock = dev->secure_sock;
+#endif /* OC_IPV4 */
   } else
 #endif /* OC_SECURITY */
 #ifdef OC_IPV4
-    if (message->endpoint.flags & IPV4) {
-    send_sock = dev->server4_sock;
-  } else {
-    send_sock = dev->server_sock;
-  }
-#else  /* OC_IPV4 */
-  {
-    send_sock = dev->server_sock;
-  }
-#endif /* !OC_IPV4 */
+		send_sock = dev->secure4_sock;
+#else
+		send_sock = dev->secure_sock;
+#endif /* OC_IPV4 */
 
   return send_msg(send_sock, &receiver, message);
 }
 
 #ifdef OC_CLIENT
-void
-oc_send_discovery_request(oc_message_t *message)
+void oc_send_discovery_request(oc_message_t *message)
 {
   ifaddr_t *ifaddr_list = get_network_addresses();
   ifaddr_t *ifaddr;
@@ -1153,40 +1161,43 @@ oc_send_discovery_request(oc_message_t *message)
   ip_context_t *dev = get_ip_context_for_device(message->endpoint.device);
 
   for (ifaddr = ifaddr_list; ifaddr != NULL; ifaddr = ifaddr->next) {
-    if (message->endpoint.flags & IPV6 && ifaddr->addr.ss_family == AF_INET6) {
-      struct sockaddr_in6 *addr = (struct sockaddr_in6 *)&ifaddr->addr;
-      DWORD mif = (DWORD)ifaddr->if_index;
-      if (setsockopt(dev->server_sock, IPPROTO_IPV6, IPV6_MULTICAST_IF,
-                     (char *)&mif, sizeof(mif)) == SOCKET_ERROR) {
-        OC_ERR("setting socket option for default IPV6_MULTICAST_IF: %d",
-               WSAGetLastError());
-        goto done;
-      }
-      if (IN6_IS_ADDR_LINKLOCAL(&addr->sin6_addr)) {
-        message->endpoint.addr.ipv6.scope = (uint8_t)ifaddr->if_index;
-      }
-      message->endpoint.interface_index = ifaddr->if_index;
-      memcpy(message->endpoint.addr_local.ipv6.address, addr->sin6_addr.u.Byte,
-             16);
-      oc_send_buffer(message);
+#ifdef OC_IPV6
+	  if (message->endpoint.flags & IPV6 && ifaddr->addr.ss_family == AF_INET6) {
+		  struct sockaddr_in6 *addr = (struct sockaddr_in6 *)&ifaddr->addr;
+		  DWORD mif = (DWORD)ifaddr->if_index;
+		  if (setsockopt(dev->server_sock, IPPROTO_IPV6, IPV6_MULTICAST_IF,
+			  (char *)&mif, sizeof(mif)) == SOCKET_ERROR) {
+			  OC_ERR("setting socket option for default IPV6_MULTICAST_IF: %d",
+				  WSAGetLastError());
+			  goto done;
+		  }
+		  if (IN6_IS_ADDR_LINKLOCAL(&addr->sin6_addr)) {
+			  message->endpoint.addr.ipv6.scope = (uint8_t)ifaddr->if_index;
+		  }
+		  message->endpoint.interface_index = ifaddr->if_index;
+		  memcpy(message->endpoint.addr_local.ipv6.address, addr->sin6_addr.u.Byte,
+			  16);
+		  oc_send_buffer(message);
+	  }
 #ifdef OC_IPV4
-    } else if (message->endpoint.flags & IPV4 &&
-               ifaddr->addr.ss_family == AF_INET) {
-      struct sockaddr_in *addr = (struct sockaddr_in *)&ifaddr->addr;
-      if (setsockopt(dev->server4_sock, IPPROTO_IP, IP_MULTICAST_IF,
-                     (char *)&addr->sin_addr,
-                     sizeof(addr->sin_addr)) == SOCKET_ERROR) {
-        OC_ERR("setting socket option for default IP_MULTICAST_IF: %d",
-               WSAGetLastError());
-        goto done;
-      }
-      message->endpoint.interface_index = ifaddr->if_index;
-      memcpy(message->endpoint.addr_local.ipv4.address,
-             &addr->sin_addr.S_un.S_addr, 4);
-      oc_send_buffer(message);
-    }
-#else  /* OC_IPV4 */
-    }
+	  else
+#endif /* OC_IPV4*/
+#endif /* OC_IPV6 */
+#ifdef OC_IPV4
+	  if (message->endpoint.flags & IPV4 && ifaddr->addr.ss_family == AF_INET) {
+		  struct sockaddr_in *addr = (struct sockaddr_in *)&ifaddr->addr;
+		  if (setsockopt(dev->server4_sock, IPPROTO_IP, IP_MULTICAST_IF,
+						 (char *)&addr->sin_addr,
+						 sizeof(addr->sin_addr)) == SOCKET_ERROR) {
+			OC_ERR("setting socket option for default IP_MULTICAST_IF: %d",
+				   WSAGetLastError());
+			goto done;
+		  }
+		  message->endpoint.interface_index = ifaddr->if_index;
+		  memcpy(message->endpoint.addr_local.ipv4.address,
+				 &addr->sin_addr.S_un.S_addr, 4);
+		  oc_send_buffer(message);
+	  }
 #endif /* ! OC_IPV4 */
   }
 done:
@@ -1195,8 +1206,7 @@ done:
 #endif /* OC_CLIENT */
 
 #ifdef OC_IPV4
-static int
-connectivity_ipv4_init(ip_context_t *dev)
+static int connectivity_ipv4_init(ip_context_t *dev)
 {
   OC_DBG("Initializing IPv4 connectivity for device %zd", dev->device);
   memset(&dev->mcast4, 0, sizeof(dev->mcast4));
@@ -1315,8 +1325,7 @@ connectivity_ipv4_init(ip_context_t *dev)
 }
 #endif
 
-int
-oc_connectivity_init(size_t device)
+int oc_connectivity_init(size_t device)
 {
   if (!ifchange_initialized) {
     WSADATA wsadata;
@@ -1335,6 +1344,7 @@ oc_connectivity_init(size_t device)
 #endif /* !OC_DYNAMIC_ALLOCATION */
   dev->device = device;
   OC_LIST_STRUCT_INIT(dev, eps);
+#ifdef OC_IPV6
   memset(&dev->mcast, 0, sizeof(dev->mcast));
   memset(&dev->server, 0, sizeof(dev->server));
 
@@ -1450,7 +1460,7 @@ oc_connectivity_init(size_t device)
 
   dev->dtls_port = ntohs(sm->sin6_port);
 #endif /* OC_SECURITY */
-
+#endif /* OC_IPV6 */
 #ifdef OC_IPV4
   if (connectivity_ipv4_init(dev) != 0) {
     OC_ERR("Could not initialize IPv4");
@@ -1506,16 +1516,16 @@ oc_connectivity_init(size_t device)
   return 0;
 }
 
-void
-oc_connectivity_shutdown(size_t device)
+void oc_connectivity_shutdown(size_t device)
 {
   ip_context_t *dev = get_ip_context_for_device(device);
   dev->terminate = TRUE;
   /* signal WSASelectEvent() in the thread to leave */
   WSASetEvent(dev->event_server_handle);
-
+#ifdef OC_IPV6
   closesocket(dev->server_sock);
   closesocket(dev->mcast_sock);
+#endif /* OC_IPV6 */
 
 #ifdef OC_IPV4
   closesocket(dev->server4_sock);
@@ -1523,7 +1533,9 @@ oc_connectivity_shutdown(size_t device)
 #endif /* OC_IPV4 */
 
 #ifdef OC_SECURITY
+#ifdef OC_IPV6
   closesocket(dev->secure_sock);
+#endif /* OC_IPV6 */
 #ifdef OC_IPV4
   closesocket(dev->secure4_sock);
 #endif /* OC_IPV4 */
