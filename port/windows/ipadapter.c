@@ -1018,6 +1018,7 @@ int send_msg(SOCKET sock, struct sockaddr_storage *receiver, oc_message_t *messa
 
   Msg.Control.buf = (char *)&control_buf;
 
+#ifdef OC_IPV6
   if (message->endpoint.flags & IPV6) {
     Msg.namelen = sizeof(struct sockaddr_in6);
 
@@ -1047,7 +1048,11 @@ int send_msg(SOCKET sock, struct sockaddr_storage *receiver, oc_message_t *messa
     memcpy(&pktinfo->ipi6_addr, message->endpoint.addr_local.ipv6.address, 16);
   }
 #ifdef OC_IPV4
-  else if (message->endpoint.flags & IPV4) {
+	else
+#endif /* OC_IPV4 */
+#endif /* OC_IPV6 */
+#ifdef OC_IPV4
+  if (message->endpoint.flags & IPV4) {
     Msg.namelen = sizeof(struct sockaddr_in);
 #pragma warning(suppress : 4116)
     Msg.Control.len = WSA_CMSG_SPACE(sizeof(struct in_pktinfo));

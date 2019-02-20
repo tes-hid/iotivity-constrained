@@ -143,8 +143,6 @@ static oc_discovery_flags_t discovered_devices(oc_uuid_t *uuid, oc_endpoint_t *e
 
 	oc_obt_perform_just_works_otm(reader_uuid, &reader_status_changed, NULL);
 
-	oc_free_server_endpoints(endpoint);
-
 	return OC_CONTINUE_DISCOVERY;
 }
 
