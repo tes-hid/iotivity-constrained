@@ -24,6 +24,7 @@ port/linux/obj/
 port/linux/onboarding_tool_creds/
 port/linux/smart_lock
 port/windows/vs2015/.vs/
+port/windows/vs2015/x64/
 port/windows/vs2015/Debug/
 port/windows/vs2015/Release/
 port/windows/vs2015/simpleserver_creds/
