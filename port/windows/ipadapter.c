@@ -1137,16 +1137,23 @@ int oc_send_buffer(oc_message_t *message)
 #ifdef OC_SECURITY
   if (message->endpoint.flags & SECURED) {
 #ifdef OC_IPV4
-		send_sock = dev->secure4_sock;
+		if (message->endpoint.flags & IPV4) {
+			send_sock = dev->secure4_sock;
+		}
+		else {
+#ifdef OC_IPV6
+			send_sock = dev->secure_sock;
 #else
-		send_sock = dev->secure_sock;
+			OC_ERR("Endpoint not enabled for ipv4..");
+#endif
+		}
 #endif /* OC_IPV4 */
   } else
 #endif /* OC_SECURITY */
 #ifdef OC_IPV4
-		send_sock = dev->secure4_sock;
+		send_sock = dev->server4_sock;
 #else
-		send_sock = dev->secure_sock;
+		send_sock = dev->server_sock;
 #endif /* OC_IPV4 */
 
   return send_msg(send_sock, &receiver, message);
