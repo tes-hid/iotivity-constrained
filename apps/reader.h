@@ -9,8 +9,8 @@ extern "C"
 {
 #endif
 
-	int reader_init(void);
-	void reader_register(void);
+int reader_init(void);
+void reader_register(void);
 
 #ifdef __cplusplus
 }

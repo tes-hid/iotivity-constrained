@@ -8,7 +8,7 @@ static bool card_present = true;
 char *card_data[SAM_CSN_LEN] = SAM_CSN;
 oc_string_t name;
 
-static int reader_init(void)
+int reader_init(void)
 {
 	int ret = oc_init_platform("HID Global", NULL, NULL);
 	ret |= oc_add_device("/oic/d", "oic.d.reader", "Reader", "ocf.1.1.0", "ocf.res.1.1.0", NULL, NULL);
@@ -72,7 +72,7 @@ static void reader_post(oc_request_t *request, oc_interface_mask_t iface_mask, v
 	oc_send_response(request, OC_STATUS_CHANGED);
 }
 
-static void reader_register(void)
+void reader_register(void)
 {
 	oc_resource_t *res = oc_new_resource(NULL, "/a/reader", 2, 0);
 	oc_resource_bind_resource_type(res, "core.reader");
