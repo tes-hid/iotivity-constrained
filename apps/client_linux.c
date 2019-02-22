@@ -52,7 +52,6 @@ int main(void)
 
   static const oc_handler_t handler = {.init = sig_init,
                                        .signal_event_loop = signal_event_loop,
-                                       .register_resources = sig_register,
                                        .requests_entry = sig_discovery };
 
   oc_clock_time_t next_event;
