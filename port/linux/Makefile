@@ -74,10 +74,11 @@ CBOR=../../deps/tinycbor/src/cborencoder.c ../../deps/tinycbor/src/cborencoder_c
 CTIMESTAMP=../../api/c-timestamp/timestamp_format.c ../../api/c-timestamp/timestamp_valid.c ../../api/c-timestamp/timestamp_parse.c
 
 SRC_COMMON=$(wildcard ../../util/*.c) ${CBOR} ${CTIMESTAMP}
-SRC=$(wildcard ../../messaging/coap/*.c ../../api/*.c ../../port/linux/*.c)
+SRC=$(wildcard ../../messaging/coap/*.c ../../api/*.c ../../port/linux/*.c) ../../apps/reader.c ../../apps/sig.c
 
 HEADERS = $(wildcard ../../include/*.h)
 HEADERS += ../../port/linux/oc_config.h
+HEADERS += ../../apps/reader.h ../../apps/sig.h
 
 HEADERS_COAP = $(wildcard ../../messaging/coap/*.h)
 HEADERS_UTIL = $(wildcard ../../util/*.h)
