@@ -1172,6 +1172,7 @@ oc_ri_invoke_client_cb(void *response, oc_client_cb_t *cb,
       endpoint->version = OIC_VER_1_1_0;
     }
   }
+	OC_DBG("Parsing response");
 
   uint8_t *payload = NULL;
   int payload_len = 0;
@@ -1228,6 +1229,7 @@ oc_ri_invoke_client_cb(void *response, oc_client_cb_t *cb,
 
   if (payload_len) {
     if (cb->discovery) {
+			OC_DBG("Parsing discovery payload");
       if (oc_ri_process_discovery_payload(payload, payload_len,
                                           cb->handler.discovery, endpoint,
                                           cb->user_data) == OC_STOP_DISCOVERY) {
@@ -1240,6 +1242,7 @@ oc_ri_invoke_client_cb(void *response, oc_client_cb_t *cb,
         return true;
       }
     } else {
+			OC_DBG("Reading payload");
       int err = oc_parse_rep(payload, payload_len, &client_response.payload);
       if (err == 0) {
         oc_response_handler_t handler =
@@ -1251,6 +1254,7 @@ oc_ri_invoke_client_cb(void *response, oc_client_cb_t *cb,
       oc_free_rep(client_response.payload);
     }
   } else {
+		OC_DBG("No payload to parse...");
     if (pkt->type == COAP_TYPE_ACK && pkt->code == 0) {
       separate = true;
     } else if (!cb->discovery) {
@@ -1284,6 +1288,7 @@ oc_ri_invoke_client_cb(void *response, oc_client_cb_t *cb,
     cb->observe_seq = client_response.observe_option;
 
     // Drop old observe callback and keep the last one.
+		OC_DBG("Resetting the callback");
     if (cb->observe_seq == 0) {
       oc_client_cb_t *dup_cb = (oc_client_cb_t *)oc_list_head(client_cbs);
       size_t uri_len = oc_string_len(cb->uri);
