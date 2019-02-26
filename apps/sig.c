@@ -2,6 +2,9 @@
 #include "oc_api.h"
 #include "util/oc_memb.h"
 
+// arbitrary, just a signal that the status state hasn't been setup yet
+#define READER_INIT_STATE -99
+
 static char a_reader[MAX_URI_LENGTH];
 static oc_endpoint_t *reader_server;
 static oc_uuid_t *reader_uuid;
@@ -9,6 +12,7 @@ static oc_uuid_t *reader_uuid;
 static bool card_present;
 static oc_string_t card_data;
 static oc_string_t reader_name;
+static int device_state = READER_INIT_STATE;
 
 static oc_string_t name;
 
@@ -102,10 +106,11 @@ static void handle_reader_payload(oc_client_response_t *data) {
 	}
 }
 
-static void device_status_changed(oc_uuid_t *device_id, int status, void *data) {
+static oc_event_callback_retval_t start_observe(void *data) {
 	(void)data;
-	// probably should make sure this is the right uuid for the reader...
-	PRINT("Reader status changed to %d\n", status);
+	PRINT("Start OBSERVE\n");
+	oc_do_observe(&a_reader, reader_server, NULL, &handle_reader_payload, LOW_QOS, data);
+	return OC_EVENT_CONTINUE;
 }
 
 static oc_event_callback_retval_t stop_observe(void *data)
@@ -114,6 +119,32 @@ static oc_event_callback_retval_t stop_observe(void *data)
 	PRINT("Stopping OBSERVE\n");
 	oc_stop_observe(a_reader, reader_server);
 	return OC_EVENT_DONE;
+}
+
+static void device_status_changed(oc_uuid_t *device_id, int status, void *data) {
+	(void)data;
+
+	// probably should make sure this is the right uuid for the reader...
+
+	if (device_state == READER_INIT_STATE) {
+		OC_DBG("Device is being initialized");
+	}
+
+	switch (status) {
+		case 0:
+			// 0 means we're on-boarded and everything is fine (pretty sure)
+			start_observe(data);
+			break;
+		case -1:
+			// something has gone wrong
+			stop_observe(data);
+			break;
+		default:
+			PRINT("Device state changed from %d to %d\n", device_state, status);
+			break;
+	}
+
+	device_state = status;
 }
 
 // this is standard resource discovery, using the unowned device discovery below
